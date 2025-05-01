@@ -21,7 +21,8 @@
 #include <cub/device/device_radix_sort.cuh>
 #define GLM_FORCE_CUDA
 #include <glm/glm.hpp>
-
+#include <time.h>
+#include <sys/time.h>
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
 namespace cg = cooperative_groups;
@@ -29,8 +30,8 @@ namespace cg = cooperative_groups;
 #include "auxiliary.h"
 #include "forward.h"
 #include "backward.h"
+#define USECPSEC 1000000ULL
 
-// Helper function to find the next-highest bit of the MSB
 // on the CPU.
 uint32_t getHigherMsb(uint32_t n)
 {
@@ -47,6 +48,12 @@ uint32_t getHigherMsb(uint32_t n)
 	if (n >> msb)
 		msb++;
 	return msb;
+}
+
+unsigned long long getTime() {
+	timeval tv;
+	gettimeofday(&tv, 0);
+	return ( (tv.tv_sec * USECPSEC) + tv.tv_usec);
 }
 
 // Wrapper method to call auxiliary coarse frustum containment test.
@@ -217,10 +224,15 @@ int CudaRasterizer::Rasterizer::forward(
 	const bool prefiltered,
 	float* out_color,
 	int* radii,
+	unsigned long long* k1_time,
+	unsigned long long* k2_time,
 	bool debug)
 {
 	const float focal_y = height / (2.0f * tan_fovy);
 	const float focal_x = width / (2.0f * tan_fovx);
+
+	unsigned long long t1 = 0;
+	unsigned long long t2 = 0;
 
 	size_t chunk_size = required<GeometryState>(P);
 	char* chunkptr = geometryBuffer(chunk_size);
@@ -243,6 +255,8 @@ int CudaRasterizer::Rasterizer::forward(
 	{
 		throw std::runtime_error("For non-RGB, provide precomputed Gaussian colors!");
 	}
+	
+	t1 = getTime();
 
 	// Run preprocessing per-Gaussian (transformation, bounding, conversion of SHs to RGB)
 	CHECK_CUDA(FORWARD::preprocess(
@@ -271,6 +285,10 @@ int CudaRasterizer::Rasterizer::forward(
 		geomState.tiles_touched,
 		prefiltered
 	), debug)
+
+	t2 = getTime();
+
+	*k1_time = t2 - t1;
 
 	// Compute prefix sum over full list of touched tile counts by Gaussians
 	// E.g., [2, 3, 0, 2, 1] -> [2, 5, 5, 7, 8]
@@ -319,6 +337,9 @@ int CudaRasterizer::Rasterizer::forward(
 
 	// Let each tile blend its range of Gaussians independently in parallel
 	const float* feature_ptr = colors_precomp != nullptr ? colors_precomp : geomState.rgb;
+	
+	t1 = getTime();
+
 	CHECK_CUDA(FORWARD::render(
 		tile_grid, block,
 		imgState.ranges,
@@ -331,6 +352,10 @@ int CudaRasterizer::Rasterizer::forward(
 		imgState.n_contrib,
 		background,
 		out_color), debug)
+
+	t2 = getTime();
+
+	*k2_time = t2 - t1;
 
 	return num_rendered;
 }
@@ -366,11 +391,15 @@ void CudaRasterizer::Rasterizer::backward(
 	float* dL_dsh,
 	float* dL_dscale,
 	float* dL_drot,
+	unsigned long long* bp_time,
 	bool debug)
 {
 	GeometryState geomState = GeometryState::fromChunk(geom_buffer, P);
 	BinningState binningState = BinningState::fromChunk(binning_buffer, R);
 	ImageState imgState = ImageState::fromChunk(img_buffer, width * height);
+
+	unsigned long long t1 = 0;
+	unsigned long long t2 = 0;
 
 	if (radii == nullptr)
 	{
@@ -409,6 +438,8 @@ void CudaRasterizer::Rasterizer::backward(
 	// given to us or a scales/rot pair? If precomputed, pass that. If not,
 	// use the one we computed ourselves.
 	const float* cov3D_ptr = (cov3D_precomp != nullptr) ? cov3D_precomp : geomState.cov3D;
+
+	t1 = getTime();
 	CHECK_CUDA(BACKWARD::preprocess(P, D, M,
 		(float3*)means3D,
 		radii,
@@ -431,4 +462,6 @@ void CudaRasterizer::Rasterizer::backward(
 		dL_dsh,
 		(glm::vec3*)dL_dscale,
 		(glm::vec4*)dL_drot), debug)
+	t2 = getTime();
+	*bp_time = t2 - t1;
 }
