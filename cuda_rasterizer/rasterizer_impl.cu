@@ -52,7 +52,6 @@ uint32_t getHigherMsb(uint32_t n)
 }
 
 unsigned long long getTime() {
-	printf("getTime\n");
 	struct timeval tv;
 	gettimeofday(&tv, 0);
 	return ((tv.tv_sec * USECPSEC) + tv.tv_usec);
@@ -232,10 +231,6 @@ int CudaRasterizer::Rasterizer::forward(
 	int* radii,
 	bool debug)
 {
-
-	printf("k1_time: %llu\n", *k1_time);
-	printf("k2_time: %llu\n", *k2_time);
-
 	const float focal_y = height / (2.0f * tan_fovy);
 	const float focal_x = width / (2.0f * tan_fovx);
 
@@ -367,9 +362,7 @@ int CudaRasterizer::Rasterizer::forward(
 	t2 = getTime();
 
 	*k2_time = t2 - t1;
-	
-	printf("k1_time: %llu\n", *k1_time);
-	printf("k2_time: %llu\n", *k2_time);
+
 	return num_rendered;
 }
 

@@ -28,8 +28,9 @@ def rasterize_gaussians(
     rotations,
     cov3Ds_precomp,
     raster_settings,
+    tensorboard,
+    iteration
 ):
-    print("rasterize_gaussians")
     return _RasterizeGaussians.apply(
         means3D,
         means2D,
@@ -40,6 +41,8 @@ def rasterize_gaussians(
         rotations,
         cov3Ds_precomp,
         raster_settings,
+        tensorboard,
+        iteration
     )
 
 class _RasterizeGaussians(torch.autograd.Function):
@@ -55,8 +58,9 @@ class _RasterizeGaussians(torch.autograd.Function):
         rotations,
         cov3Ds_precomp,
         raster_settings,
+        tensorboard,
+        iteration
     ):
-        print("RasterizeGaussians forward")
         # Restructure arguments the way that the C++ lib expects them
         args = (
             raster_settings.bg, 
@@ -87,14 +91,23 @@ class _RasterizeGaussians(torch.autograd.Function):
         # Keep relevant tensors for backward
         ctx.raster_settings = raster_settings
         ctx.num_rendered = num_rendered
+        ctx.tensorboard = tensorboard
+        ctx.iteration = iteration
+        
         ctx.save_for_backward(colors_precomp, means3D, scales, rotations, cov3Ds_precomp, radii, sh, opacities, geomBuffer, binningBuffer, imgBuffer)
-        return color, radii, invdepths, k1_time, k2_time
+        
+        tensorboard.add_scalar('k1_time', k1_time, iteration)
+        tensorboard.add_scalar('k2_time', k2_time, iteration)
+        return color, radii, invdepths
 
     @staticmethod
     def backward(ctx, grad_out_color, _, grad_out_depth):
         # Restore necessary values from context
         num_rendered = ctx.num_rendered
         raster_settings = ctx.raster_settings
+        tensorboard = ctx.tensorboard
+        iteration = ctx.iteration
+        
         colors_precomp, means3D, scales, rotations, cov3Ds_precomp, radii, sh, opacities, geomBuffer, binningBuffer, imgBuffer = ctx.saved_tensors
 
         # Restructure args as C++ method expects them
@@ -125,7 +138,10 @@ class _RasterizeGaussians(torch.autograd.Function):
 
         # Compute gradients for relevant tensors by invoking backward method
         grad_means2D, grad_colors_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_sh, grad_scales, grad_rotations, bp_time = _C.rasterize_gaussians_backward(*args)        
-
+        
+        # Log backward pass time
+        tensorboard.add_scalar('bp_time', bp_time, iteration)
+        
         grads = (
             grad_means3D,
             grad_means2D,
@@ -136,9 +152,11 @@ class _RasterizeGaussians(torch.autograd.Function):
             grad_rotations,
             grad_cov3Ds_precomp,
             None,
+            None,
+            None,
         )
 
-        return grads, bp_time
+        return grads
 
 class GaussianRasterizationSettings(NamedTuple):
     image_height: int
@@ -156,9 +174,10 @@ class GaussianRasterizationSettings(NamedTuple):
     antialiasing : bool
 
 class GaussianRasterizer(nn.Module):
-    def __init__(self, raster_settings):
+    def __init__(self, raster_settings, tensorboard = None):
         super().__init__()
         self.raster_settings = raster_settings
+        self.tensorboard = tensorboard
 
     def markVisible(self, positions):
         # Mark visible points (based on frustum culling for camera) with a boolean 
@@ -171,9 +190,9 @@ class GaussianRasterizer(nn.Module):
             
         return visible
 
-    def forward(self, means3D, means2D, opacities, shs = None, colors_precomp = None, scales = None, rotations = None, cov3D_precomp = None):
-        print("GaussianRasterizer forward")    
+    def forward(self, means3D, means2D, opacities, shs = None, colors_precomp = None, scales = None, rotations = None, cov3D_precomp = None, iteration = 0):   
         raster_settings = self.raster_settings
+        tensorboard = self.tensorboard
 
         if (shs is None and colors_precomp is None) or (shs is not None and colors_precomp is not None):
             raise Exception('Please provide excatly one of either SHs or precomputed colors!')
@@ -204,5 +223,7 @@ class GaussianRasterizer(nn.Module):
             rotations,
             cov3D_precomp,
             raster_settings, 
+            tensorboard,
+            iteration
         )
 

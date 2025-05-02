@@ -95,7 +95,6 @@ RasterizeGaussiansCUDA(
 		M = sh.size(1);
       }
 
-	  printf("rasterize_points.cu: forward");
 	  rendered = CudaRasterizer::Rasterizer::forward(
 	    geomFunc,
 		binningFunc,
@@ -159,7 +158,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
   const int H = dL_dout_color.size(1);
   const int W = dL_dout_color.size(2);
   unsigned long long bp_time = 0;
-  
+ 
   int M = 0;
   if(sh.size(0) != 0)
   {	
