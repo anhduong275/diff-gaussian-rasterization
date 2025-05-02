@@ -49,6 +49,8 @@ namespace CudaRasterizer
 			const float tan_fovx, float tan_fovy,
 			const bool prefiltered,
 			float* out_color,
+			unsigned long long* k1_time = nullptr,
+			unsigned long long* k2_time = nullptr,
 			int* radii = nullptr,
 			bool debug = false);
 
@@ -81,6 +83,7 @@ namespace CudaRasterizer
 			float* dL_dsh,
 			float* dL_dscale,
 			float* dL_drot,
+			unsigned long long* bp_time,
 			bool debug);
 	};
 };

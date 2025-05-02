@@ -88,6 +88,7 @@ RasterizeGaussiansCUDA(
 		M = sh.size(1);
       }
 
+	  printf("rasterize_points.cu: forward");
 	  rendered = CudaRasterizer::Rasterizer::forward(
 	    geomFunc,
 		binningFunc,
@@ -110,11 +111,12 @@ RasterizeGaussiansCUDA(
 		tan_fovy,
 		prefiltered,
 		out_color.contiguous().data<float>(),
-		radii.contiguous().data<int>(),
 		&k1_time,
 		&k2_time,
+		radii.contiguous().data<int>(),
 		debug);
   }
+  printf("rasterize_points.cu: making tuple");
   return std::make_tuple(rendered, out_color, radii, geomBuffer, binningBuffer, imgBuffer, k1_time, k2_time);
 }
 
