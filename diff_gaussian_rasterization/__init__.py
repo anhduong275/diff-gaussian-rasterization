@@ -96,8 +96,9 @@ class _RasterizeGaussians(torch.autograd.Function):
         
         ctx.save_for_backward(colors_precomp, means3D, scales, rotations, cov3Ds_precomp, radii, sh, opacities, geomBuffer, binningBuffer, imgBuffer)
         
-        tensorboard.add_scalar('k1_time', k1_time, iteration)
-        tensorboard.add_scalar('k2_time', k2_time, iteration)
+        if tensorboard is not None:
+            tensorboard.add_scalar('k1_time', k1_time, iteration)
+            tensorboard.add_scalar('k2_time', k2_time, iteration)
         return color, radii, invdepths
 
     @staticmethod
@@ -140,7 +141,8 @@ class _RasterizeGaussians(torch.autograd.Function):
         grad_means2D, grad_colors_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_sh, grad_scales, grad_rotations, bp_time = _C.rasterize_gaussians_backward(*args)        
         
         # Log backward pass time
-        tensorboard.add_scalar('bp_time', bp_time, iteration)
+        if tensorboard is not None:
+            tensorboard.add_scalar('bp_time', bp_time, iteration)
         
         grads = (
             grad_means3D,
