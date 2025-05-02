@@ -51,6 +51,8 @@ namespace CudaRasterizer
 			float* out_color,
 			float* depth,
 			bool antialiasing,
+			unsigned long long* k1_time = nullptr,
+			unsigned long long* k2_time = nullptr,
 			int* radii = nullptr,
 			bool debug = false);
 
@@ -87,6 +89,7 @@ namespace CudaRasterizer
 			float* dL_dscale,
 			float* dL_drot,
 			bool antialiasing,
+			unsigned long long* bp_time,
 			bool debug);
 	};
 };
